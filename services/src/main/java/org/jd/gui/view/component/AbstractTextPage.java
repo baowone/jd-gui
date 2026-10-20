@@ -33,8 +33,18 @@ import java.util.Map;
 public class AbstractTextPage extends JPanel implements LineNumberNavigable, ContentSearchable, UriOpenable, PreferencesChangeListener {
     protected static final String FONT_SIZE_KEY = "ViewerPreferences.fontSize";
 
-    protected static final ImageIcon COLLAPSED_ICON = new ImageIcon(AbstractTextPage.class.getClassLoader().getResource("org/jd/gui/images/plus.png"));
-    protected static final ImageIcon EXPANDED_ICON = new ImageIcon(AbstractTextPage.class.getClassLoader().getResource("org/jd/gui/images/minus.png"));
+    protected static final FoldIndicatorIcon COLLAPSED_ICON = new FoldIndicatorIcon(true) {
+        private final ImageIcon icon = new ImageIcon(AbstractTextPage.class.getClassLoader().getResource("org/jd/gui/images/plus.png"));
+        @Override public void paintIcon(Component c, Graphics g, int x, int y) { icon.paintIcon(c, g, x, y); }
+        @Override public int getIconWidth() { return icon.getIconWidth(); }
+        @Override public int getIconHeight() { return icon.getIconHeight(); }
+    };
+    protected static final FoldIndicatorIcon EXPANDED_ICON = new FoldIndicatorIcon(false) {
+        private final ImageIcon icon = new ImageIcon(AbstractTextPage.class.getClassLoader().getResource("org/jd/gui/images/minus.png"));
+        @Override public void paintIcon(Component c, Graphics g, int x, int y) { icon.paintIcon(c, g, x, y); }
+        @Override public int getIconWidth() { return icon.getIconWidth(); }
+        @Override public int getIconHeight() { return icon.getIconHeight(); }
+    };
 
     protected static final Color DOUBLE_CLICK_HIGHLIGHT_COLOR = new Color(0x66ff66);
     protected static final Color SEARCH_HIGHLIGHT_COLOR = new Color(0xffff66);

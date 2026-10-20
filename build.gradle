@@ -1,42 +1,38 @@
 buildscript {
     repositories {
-        jcenter()
+        mavenCentral()
+        gradlePluginPortal()
     }
     dependencies {
-        classpath 'com.netflix.nebula:gradle-ospackage-plugin:5.3.0'    // RPM & DEB support
-        classpath 'edu.sc.seis.gradle:launch4j:2.4.4'
-        classpath 'net.sf.proguard:proguard-gradle:6.1.0'
+        classpath 'com.netflix.nebula:gradle-ospackage-plugin:11.4.0'    // RPM & DEB support
+        classpath 'edu.sc.seis.launch4j:launch4j:2.5.4'
+        classpath 'com.guardsquare:proguard-gradle:7.6.1'
     }
 }
 
 apply plugin: 'java'
 apply plugin: 'distribution'
 apply plugin: 'edu.sc.seis.launch4j'
-apply plugin: 'nebula.ospackage'
+apply plugin: 'com.netflix.nebula.ospackage'
 
 // Common configuration //
 rootProject.version='1.6.6'
 rootProject.ext.set('jdCoreVersion', '1.1.3')
-targetCompatibility = '1.8'
 
 allprojects {
     apply plugin: 'eclipse'
     apply plugin: 'idea'
 
-    tasks.withType(JavaCompile) {
-        sourceCompatibility = targetCompatibility = '1.8'
+    tasks.withType(JavaCompile).configureEach {
+        sourceCompatibility = '1.8'
+        targetCompatibility = '1.8'
         options.compilerArgs << '-Xlint:deprecation'
         options.compilerArgs << '-Xlint:unchecked'
         options.encoding = 'UTF-8'
     }
 
     repositories {
-        jcenter()
-    }
-
-    configurations {
-        provided
-        compile.extendsFrom provided
+        mavenCentral()
     }
 }
 
@@ -63,7 +59,7 @@ jar {
     subprojects.each { subproject ->
         from subproject.sourceSets.main.output.classesDirs
         from subproject.sourceSets.main.output.resourcesDir
-        deps += subproject.configurations.runtime - subproject.configurations.provided
+        deps += subproject.configurations.runtimeClasspath
     }
     subprojects.each { subproject ->
         deps -= subproject.jar.archivePath
@@ -104,21 +100,29 @@ task proguard(type: proguard.gradle.ProGuardTask, dependsOn: 'jar') {
     configuration 'src/proguard/resources/proguard.config.txt'
     injars jar.archivePath
     outjars 'build/libs/' + project.name + '-' + project.version + '-min.jar'
-    libraryjars System.getProperty('java.home') + '/lib/rt.jar'
-    libraryjars System.getProperty('java.home') + '/jmods/'
+    // Java 8 has rt.jar; Java 9+ uses jmods
+    if (System.getProperty('java.version').startsWith('1.')) {
+        libraryjars System.getProperty('java.home') + '/lib/rt.jar'
+    } else {
+        libraryjars System.getProperty('java.home') + '/jmods/'
+    }
 }
 
 // Java executable wrapper for Windows //
-launch4j {
-    createExe.dependsOn 'proguard'
+createExe.dependsOn 'proguard'
 
-    version = textVersion = project.version
-    fileDescription = productName = 'JD-GUI'
-    errTitle 'JD-GUI Windows Wrapper'
-    copyright 'JD-GUI (C) 2008-2019 Emmanuel Dupuy'
-    icon projectDir.path + '/src/launch4j/resources/images/jd-gui.ico'
-    jar projectDir.path + '/' + proguard.outJarFiles[0]
+launch4j {
+    version = project.version
+    textVersion = project.version
+    fileDescription = 'JD-GUI'
+    productName = 'JD-GUI'
+    errTitle = 'JD-GUI Windows Wrapper'
+    copyright = 'JD-GUI (C) 2008-2019 Emmanuel Dupuy'
+    icon = projectDir.path + '/src/launch4j/resources/images/jd-gui.ico'
+    jar = projectDir.path + '/' + proguard.outJarFiles[0]
     bundledJrePath = '%JAVA_HOME%'
+    mainClassName = 'org.jd.gui.App'
+    copyConfigurable = []
 }
 
 // Packages for Linux //

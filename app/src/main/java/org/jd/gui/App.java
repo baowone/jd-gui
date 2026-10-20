@@ -26,6 +26,7 @@ public class App {
     protected static MainController controller;
 
     public static void main(String[] args) {
+        setDockIcon();
 		if (checkHelpFlag(args)) {
 			JOptionPane.showMessageDialog(null, "Usage: jd-gui [option] [input-file] ...\n\nOption:\n -h Show this help message and exit", Constants.APP_NAME, JOptionPane.INFORMATION_MESSAGE);
 		} else {
@@ -83,6 +84,37 @@ public class App {
                 files.add(new File(path));
             }
             return files;
+        }
+    }
+
+    // Set the macOS dock icon when launched directly via 'java -jar' (no app bundle
+    // stub to pass -Xdock:icon). Java 9+ exposes java.awt.Taskbar.setIconImage;
+    // reflectively invoked so this still compiles on JDK 8.
+    private static void setDockIcon() {
+        try {
+            String v = System.getProperty("java.specification.version", "1.8");
+            if (v.startsWith("1.")) {
+                return;
+            }
+            int major;
+            try {
+                major = Integer.parseInt(v);
+            } catch (NumberFormatException e) {
+                return;
+            }
+            if (major < 9) {
+                return;
+            }
+            java.net.URL url = App.class.getClassLoader().getResource("org/jd/gui/images/jd_icon_128.png");
+            if (url == null) {
+                return;
+            }
+            java.awt.Image image = java.awt.Toolkit.getDefaultToolkit().getImage(url);
+            Class<?> taskbarClass = Class.forName("java.awt.Taskbar");
+            Object taskbar = taskbarClass.getMethod("getTaskbar").invoke(null);
+            taskbarClass.getMethod("setIconImage", java.awt.Image.class).invoke(taskbar, image);
+        } catch (Throwable t) {
+            assert ExceptionUtil.printStackTrace(t);
         }
     }
 }

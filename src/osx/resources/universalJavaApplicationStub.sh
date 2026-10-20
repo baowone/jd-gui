@@ -221,23 +221,37 @@ fi
 # find installed Java versions
 #################################
 
-# first check system variable "$JAVA_HOME"
-if [ -n "$JAVA_HOME" ] ; then
-	JAVACMD="$JAVA_HOME/bin/java"
-	
-# check for specified JVMversion in "/usr/libexec/java_home" symlinks
-elif [ ! -z ${JVMVersion} ] && [ -x /usr/libexec/java_home ] && /usr/libexec/java_home -F; then
-
-	if /usr/libexec/java_home -F -v ${JVMVersion}; then
-		JAVACMD="`/usr/libexec/java_home -F -v ${JVMVersion} 2> /dev/null`/bin/java"
-	else
+# Resolve a JVM, preferring a HiDPI-capable one (Java 9+) when JVMVersion is set.
+# $JAVA_HOME is intentionally ignored when a version is required: it may point
+# to an older/incompatible JDK (e.g. Java 8 on Apple Silicon, which lacks HiDPI
+# and crashes as a GUI app). java_home's "-F -v <ver>+" is broken for '+'
+# suffixes on some macOS releases, and "java_home -v <ver>" without -F silently
+# falls back to the default JVM, so we probe exact major versions and verify the
+# returned JVM's major version actually matches.
+if [ ! -z ${JVMVersion} ] && [ -x /usr/libexec/java_home ]; then
+	for v in 21 17 11 9; do
+		P=$(/usr/libexec/java_home -v $v 2>/dev/null)
+		[ -z "$P" ] && continue
+		if [ -x "$P/bin/java" ]; then
+			M=$("$P/bin/java" -version 2>&1 | awk -F'"' 'NR==1{split($2,a,"."); if(a[1]=="1") print a[2]; else print a[1]}')
+			if [ "$M" = "$v" ] 2>/dev/null; then
+				JAVACMD="$P/bin/java"
+				break
+			fi
+		fi
+	done
+	if [ -z "$JAVACMD" ]; then
 		# display error message with applescript
 		osascript -e "tell application \"System Events\" to display dialog \"ERROR launching '${CFBundleName}'\n\nNo suitable Java version found on your system!\nThis program requires Java ${JVMVersion}\nMake sure you install the required Java version.\" with title \"${CFBundleName}\" buttons {\" OK \"} default button 1 with icon path to resource \"${CFBundleIconFile}\" in bundle (path to me)"
 		# exit with error
 		exit 3
 	fi
 
-# otherwise check "/usr/libexec/java_home" symlinks
+# no version requirement: fall back to $JAVA_HOME
+elif [ -n "$JAVA_HOME" ] ; then
+	JAVACMD="$JAVA_HOME/bin/java"
+
+# otherwise check "/usr/libexec/java_home" default
 elif [ -x /usr/libexec/java_home ] && /usr/libexec/java_home -F; then
 	JAVACMD="`/usr/libexec/java_home 2> /dev/null`/bin/java"
 
@@ -285,14 +299,23 @@ elif [ -f "$JAVACMD" ] && [ -x "$JAVACMD" ] ; then
 	#	- JVM default options
 	#	- main class
 	#	- JVM arguments
-	exec "$JAVACMD" \
+	#
+	# Launch as a child process (NOT exec) so the JVM does not inherit this
+	# .app bundle as its "main bundle". On macOS 26 / Apple Silicon the java
+	# launcher crashes in CreateExecutionEnvironment -> CFBundleGetIdentifier ->
+	# __CFCheckCFInfoPACSignature when it is the bundle's foreground process.
+	# Running java as a child (like launching from a terminal) avoids that
+	# path while keeping full HiDPI rendering and the -Xdock icon/name.
+	"$JAVACMD" \
 			-cp "${JVMClassPath}" \
 			-Xdock:icon="${ResourcesFolder}/${CFBundleIconFile}" \
 			-Xdock:name="${CFBundleName}" \
 			${JVMOptions:+$JVMOptions }\
 			${JVMDefaultOptions:+$JVMDefaultOptions }\
 			${JVMMainClass}\
-			${JVMArguments:+ $JVMArguments}
+			${JVMArguments:+ $JVMArguments} &
+	JAVA_PID=$!
+	wait $JAVA_PID
 
 
 else
